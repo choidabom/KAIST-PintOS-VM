@@ -6,7 +6,8 @@
                 "${workspaceFolder}/**"
             ],
             "defines": [
-                "VM"
+                "VM",
+                "USERPROG"
             ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",

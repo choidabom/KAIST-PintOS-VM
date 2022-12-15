@@ -14,6 +14,7 @@
     "thread.h": "c",
     "mmu.h": "c",
     "vaddr.h": "c",
-    "flags.h": "c"
+    "flags.h": "c",
+    "hash.h": "c"
   }
 }

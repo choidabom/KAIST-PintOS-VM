@@ -2,6 +2,9 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include <hash.h>
+#include "threads/mmu.h"
+#include "threads/synch.h"
 
 enum vm_type
 {
@@ -11,7 +14,7 @@ enum vm_type
 	/* page not related to the file, aka anonymous page
 	=> 파일과 relate 되지 않은 페이지, aka anonymous page */
 	VM_ANON = 1,
-	/* page that realated to the file
+	/* page that related to the file
 	=> 파일과 relate 된 페이지 */
 	VM_FILE = 2,
 	/* page that hold the page cache, for project 4
@@ -22,7 +25,7 @@ enum vm_type
 
 	/* Auxillary bit flag marker for store information. You can add more
 	 * markers, until the value is fit in the int. */
-	VM_MARKER_0 = (1 << 3),
+	VM_MARKER_0 = (1 << 3),	/* Stack */
 	VM_MARKER_1 = (1 << 4),
 
 	/* DO NOT EXCEED THIS VALUE. */
@@ -40,6 +43,7 @@ struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type)&7)
+#define VM_IS_STACK(type) ((type) & VM_MARKER_0)
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -52,6 +56,8 @@ struct page
 	struct frame *frame; /* Back reference for frame */
 
 	/* Your implementation */
+	/* 해시 테이블에서 관리하기 위해서 hash_elem 타입의 멤버 추가 */
+	struct hash_elem hash_elem;	/* PROJECT3: Virtual Memeory */
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -95,7 +101,9 @@ struct page_operations
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table
-{
+{	
+	/* struct hash를 선언해줌으로써 해시 테이블이 하나 생긴 것 !! */
+	struct hash pages;
 };
 
 #include "threads/thread.h"
@@ -119,5 +127,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+unsigned page_hash(const struct hash_elem *p_, void *aux);
+bool page_less (const struct hash_elem *a_, const struct hash_elem *b, void *aux);
 
 #endif /* VM_VM_H */

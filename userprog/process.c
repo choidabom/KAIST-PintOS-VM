@@ -30,7 +30,6 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(struct fork_data *aux);
-void argument_stack(char **parse, int count, void **rsp);
 struct thread *get_child(int tid);
 struct fork_data
 {
@@ -86,7 +85,6 @@ initd(void *f_name)
 #endif
 
 	process_init();
-
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
@@ -293,12 +291,10 @@ int process_exec(void *f_name)
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
-
 	/* We first kill the current context */
 	process_cleanup();
 
 	/* And then load the binary */
-
 	success = load(f_name, &_if);
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
@@ -577,7 +573,10 @@ load(const char *file_name, struct intr_frame *if_)
 				}
 				if (!load_segment(file, file_page, (void *)mem_page,
 								  read_bytes, zero_bytes, writable))
+				{
+					printf("load_segment 터짐\n");
 					goto done;
+				}
 			}
 			else
 				goto done;
@@ -587,7 +586,10 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* Set up stack. */
 	if (!setup_stack(if_))
+	{
+		printf("setup_stack에서 터짐\n");
 		goto done;
+	}
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
@@ -793,11 +795,29 @@ install_page(void *upage, void *kpage, bool writable)
  * upper block. */
 
 static bool
-lazy_load_segment(struct page *page, void *aux)
+lazy_load_segment(struct page *page, struct aux *aux)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+
+	/* Load aux data */
+	struct file *file = aux->file;
+	off_t ofs = aux->ofs;
+	size_t page_read_bytes = aux->page_read_bytes;
+	size_t page_zero_bytes = aux->page_zero_bytes;
+
+	file_seek(file, ofs);
+
+	/* Load this page. */
+	if (file_read(file, page->va, page_read_bytes) != (int)page_read_bytes)
+		return false;
+
+	memset(page->va + page_read_bytes, 0, page_zero_bytes);
+
+	free(aux);
+
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -821,7 +841,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
-
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
@@ -829,17 +848,20 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct aux *aux = calloc(1, sizeof(struct aux));
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->page_read_bytes = page_read_bytes;
+		aux->page_zero_bytes = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
-
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += PGSIZE;
 	}
 	return true;
 }
@@ -855,6 +877,11 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true))
+	{
+		if_->rsp = USER_STACK;
+		success = true;
+	}
 
 	return success;
 }

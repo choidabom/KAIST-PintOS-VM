@@ -144,11 +144,7 @@ page_fault(struct intr_frame *f)
 	user = (f->error_code & PF_U) != 0;
 	// 0 => 커널, 1 => 유저 프로세스
 
-	if (user)
-	{
-		f->R.rdi = -1;
-		exit_handler(f->R.rdi);
-	}
+
 
 	// exit_handler(-1);
 	// stack pointer가 가리키는 주소에서 page fault가 발생할 경우, exit() 시스템 콜을 호출하여 실행중인 프로세스를 종료하도록 한다.
@@ -161,6 +157,11 @@ page_fault(struct intr_frame *f)
 		return;
 #endif
 
+	if (user || write || not_present)
+	{
+		f->R.rdi = -1;
+		exit_handler(f->R.rdi);
+	}
 	/* Count page faults. */
 	page_fault_cnt++;
 
@@ -178,4 +179,5 @@ page_fault(struct intr_frame *f)
 	// }
 
 	kill(f);
+	// exit_handler(-1);
 }
