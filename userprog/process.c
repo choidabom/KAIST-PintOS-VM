@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -223,6 +224,8 @@ __do_fork(struct fork_data *aux) // aux 인자로 struct fork_data 가 들어옴
 		goto error;
 
 	process_activate(current); /* 해당 스레드의 페이지 테이블 활성화 (흠 .. 매핑 활성화하는 친구)*/
+	current->now_file = file_duplicate(parent->now_file);
+
 #ifdef VM
 	supplemental_page_table_init(&current->spt);
 	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
@@ -238,6 +241,7 @@ __do_fork(struct fork_data *aux) // aux 인자로 struct fork_data 가 들어옴
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+
 	struct list_elem *start;
 	struct list *parent_list = &parent->fd_list;
 	if (!list_empty(parent_list))
@@ -245,7 +249,6 @@ __do_fork(struct fork_data *aux) // aux 인자로 struct fork_data 가 들어옴
 		for (start = list_begin(parent_list); start != list_end(parent_list); start = list_next(start))
 		{
 			struct file_fd *parent_fd = list_entry(start, struct file_fd, fd_elem);
-			// printf("parent_fd : %d \n", parent_fd->fd);
 			if (parent_fd->file != NULL)
 			{
 				struct file_fd *child_fd = malloc(sizeof(struct file_fd));
@@ -487,6 +490,12 @@ load(const char *file_name, struct intr_frame *if_)
 	char *token_argv[LOADER_ARGS_LEN / 2 + 1];
 	int argc = 0;
 
+	/* 로드가 호출되기 전에 실행하고 있는 파일이 있으면, 파일을 close 해줘야함. */
+	if(t->now_file){
+		file_close(t->now_file);
+		t->now_file = NULL;
+	}
+
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create();
 	if (t->pml4 == NULL)
@@ -519,9 +528,6 @@ load(const char *file_name, struct intr_frame *if_)
 		printf("load: %s: error loading executable\n", process_name);
 		goto done;
 	}
-
-	t->now_file = file; /* 현재 프로세스가 실행 중인 파일을 저장 */
-	file_deny_write(file);
 
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
@@ -631,6 +637,8 @@ load(const char *file_name, struct intr_frame *if_)
 	// rsi가 argv의 주소(argv[0]의 주소를 가리키게 하고, rdi를 argc로 설정합니다.
 	if_->R.rsi = stack_ptr + 8;
 	if_->R.rdi = argc;
+	t->now_file = file; /* 현재 프로세스가 실행 중인 파일을 저장 */
+	file_deny_write(file);
 	success = true;
 done:
 	/* We arrive here whether the load is successful or not. */
@@ -808,14 +816,15 @@ lazy_load_segment(struct page *page, struct aux *aux)
 	size_t page_zero_bytes = aux->page_zero_bytes;
 
 	file_seek(file, ofs);
-
 	/* Load this page. */
 	if (file_read(file, page->va, page_read_bytes) != (int)page_read_bytes)
+	{
 		return false;
+	}
 
 	memset(page->va + page_read_bytes, 0, page_zero_bytes);
 
-	free(aux);
+	// free(aux);
 
 	return true;
 }

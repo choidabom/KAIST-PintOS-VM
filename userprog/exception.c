@@ -156,7 +156,6 @@ page_fault(struct intr_frame *f)
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
 		return;
 #endif
-
 	if (user || write || not_present)
 	{
 		f->R.rdi = -1;
@@ -171,12 +170,6 @@ page_fault(struct intr_frame *f)
 		   not_present ? "not present" : "rights violation",
 		   write ? "writing" : "reading",
 		   user ? "user" : "kernel");
-
-	// if (user)
-	// {
-	// 	thread_current()->exit_status = -1;
-	// 	thread_exit();
-	// }
 
 	kill(f);
 	// exit_handler(-1);

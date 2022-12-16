@@ -5,6 +5,7 @@
 #include <hash.h>
 #include "threads/mmu.h"
 #include "threads/synch.h"
+#include "filesys/file.h"
 
 enum vm_type
 {
@@ -58,6 +59,7 @@ struct page
 	/* Your implementation */
 	/* 해시 테이블에서 관리하기 위해서 hash_elem 타입의 멤버 추가 */
 	struct hash_elem hash_elem;	/* PROJECT3: Virtual Memeory */
+	bool writable;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */

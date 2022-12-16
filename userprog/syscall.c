@@ -17,7 +17,7 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void check_address(void *addr);
+bool check_address(bool write, void *addr);
 void exit_handler(int status);
 tid_t fork_handler(const char *thread_name, struct intr_frame *f);
 int exec_handler(const char *file_name);
@@ -32,7 +32,6 @@ void seek_handler(int fd, unsigned position);
 unsigned tell_handler(int fd);
 void close_handler(int fd);
 int process_add_file(struct file *f); /* 파일 객체에 대한 파일 디스크립터 생성 */
-struct lock filesys_lock;			  /* read(), write()에서 파일 접근 전 lock을 획득하도록 구현*/
 
 /* System call.
  *
@@ -147,7 +146,7 @@ tid_t fork_handler(const char *thread_name, struct intr_frame *f)
 /* 현재 프로세스를 인자로 주어진 이름을 갖는 실행 파일로 변경한다.  */
 int exec_handler(const char *file_name)
 {
-	check_address(file_name);
+	check_address(0, file_name);
 	char *file = palloc_get_page(PAL_ZERO);
 	strlcpy(file, file_name, strlen(file_name) + 1);
 
@@ -165,7 +164,7 @@ int wait_handler(tid_t tid)
 /* 파일을 생성하는 시스템 콜 */
 bool create_handler(const char *file, unsigned initial_size)
 {
-	check_address(file);
+	check_address(0, file);
 	if (file == NULL)
 	{
 		exit_handler(-1);
@@ -177,13 +176,13 @@ bool create_handler(const char *file, unsigned initial_size)
 /* file: 제거할 파일의 이름 및 경로 정보 */
 bool remove_handler(const char *file)
 {
-	check_address(file);
+	check_address(0, file);
 	return filesys_remove(file);
 }
 
 int open_handler(const char *file)
 {
-	check_address(file);
+	check_address(0, file);
 	if (thread_current()->fd_count > 20)
 	{
 		return -1;
@@ -218,7 +217,7 @@ int filesize_handler(int fd)
 // bad-fd는 page-fault를 일으키기 때문에 page-fault를 처리하는 함수에서 확인
 int read_handler(int fd, void *buffer, unsigned size)
 {
-	check_address(buffer);
+	check_address(1, buffer);
 	struct thread *curr = thread_current();
 	struct list_elem *start;
 	off_t buff_size;
@@ -250,8 +249,6 @@ int read_handler(int fd, void *buffer, unsigned size)
 
 int write_handler(int fd, const void *buffer, unsigned size)
 {
-
-	check_address(buffer);
 	struct thread *curr = thread_current();
 	struct list_elem *start;
 	if (fd == 1)
@@ -262,13 +259,16 @@ int write_handler(int fd, const void *buffer, unsigned size)
 		// putbuf 함수는 buffer에 입력된 데이터를 size만큼 화면에 출력하는 함수.
 		// 이후 버퍼의 크기 -> size를 반환한다.
 	}
-	else if (fd < 0 || fd == NULL)
+	else if (fd < 0 || fd == NULL || !check_address(0, buffer))
 	{
 		exit_handler(-1);
 	}
 	for (start = list_begin(&curr->fd_list); start != list_end(&curr->fd_list); start = list_next(start))
 	{
 		struct file_fd *write_fd = list_entry(start, struct file_fd, fd_elem);
+		// if (write_fd->file == NULL){
+		// 	exit_handler(-1);
+		// }
 		if (write_fd->fd == fd)
 		{
 			lock_acquire(&filesys_lock);
@@ -333,16 +333,21 @@ void close_handler(int fd)
 	return;
 }
 
-void check_address(void *addr)
+bool check_address(bool write, void *addr)
 {
-	/* 포인터가 가리키는 주소가 유저영역의 주소인지 확인 */
-	// if (&addr < 0x8048000 || &addr > 0xc0000000)
+	struct thread *curr = thread_current();
+	if (addr == NULL)
+		return false;
+	struct page *p = spt_find_page(&curr->spt, pg_round_down(addr));
+	if (p == NULL)
+		return false;
+	else{
+		if (write && !p->writable){
+			return false;
+		}
+	}
+	return true;
 
-	// 유저 가상 공간에 존재하지만 페이지에 할당되지 않은 경우도 존재함
-	if (is_user_vaddr(addr) && pml4_get_page(thread_current()->pml4, addr) && addr != NULL)
-		return;
-	else
-		exit_handler(-1);
 }
 
 // int process_add_file(struct file *f)
