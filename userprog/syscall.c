@@ -350,25 +350,6 @@ bool check_address(bool write, void *addr)
 
 }
 
-// int process_add_file(struct file *f)
-// {
-// 	struct thread *curr = thread_current();
-// 	struct file_fd *new_fd = malloc(sizeof(struct file_fd));
-
-// 	// curr에 있는 fd_list의 fd를 확인하기 위한 작업
-// 	// list_begin 했을 경우 fd = 0 출력되고, list_back 했을 경우 fd = 1 출력됨
-// 	struct list_elem *curr_elem = list_back(&curr->fd_list);
-// 	struct file_fd *curr_fd = list_entry(curr_elem, struct file_fd, fd_elem);
-// 	printf("%d\n", curr_fd->fd);
-
-// 	curr_fd->fd += 1;
-// 	new_fd->fd = curr_fd->fd; => 이 부분에 확신이 없음
-// 	new_fd->file = f;
-// 	list_push_back(&curr->fd_list, &new_fd->fd_elem);
-
-// 	return new_fd->fd;
-// }
-
 int process_add_file(struct file *f)
 {
 	struct thread *curr = thread_current();
